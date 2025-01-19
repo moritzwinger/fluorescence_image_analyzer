@@ -18,7 +18,7 @@ This tool analyzes multichannel fluorescence images, specifically designed to wo
    ```
 
 3. Install the required packages:
-   ```bash
+   ```
    pip install -r requirements.txt
    ```
 
@@ -32,8 +32,8 @@ This tool analyzes multichannel fluorescence images, specifically designed to wo
    Or modify the file paths in the code to match your file names.
 
 2. Run the script:
-   ```bash
-   python multichannel-analyzer.py
+   ```
+   python3 multichannel-analyzer.py
    ```
 
 3. Use the interface:
