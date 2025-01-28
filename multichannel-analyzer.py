@@ -238,7 +238,7 @@ class MultichannelAnalyzer:
         
         # Make it much more selective
         adjustment_factor = 0.2  # adust me
-        base_minimum = 0      # Don't go below this threshold
+        base_minimum = 0         # Don't go below this threshold
         
         # Take the maximum of:
         # 1. Adjusted Otsu threshold
