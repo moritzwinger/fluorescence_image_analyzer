@@ -90,31 +90,56 @@ class MultichannelAnalyzer:
         cv2.drawContours(mask, contours, -1, 255, -1)  # -1 fills the contours
         return mask
 
-    def calculate_areas(self, red_contours: List[np.ndarray], cyan_contours: List[np.ndarray], 
-                       shape: Tuple[int, int]) -> dict:
-        """Calculate areas of overlap and difference between red and cyan regions"""
-        # Create binary masks
-        red_mask = self.create_binary_mask(red_contours, shape)
-        cyan_mask = self.create_binary_mask(cyan_contours, shape)
+    def calculate_areas(self, red_contours: List[np.ndarray], cyan_contours: List[np.ndarray], magenta_contours: List[np.ndarray], shape: Tuple[int, int]) -> dict:
+        """Calculate areas and ratios of cyan and magenta within red regions"""
+        # Create binary masks more efficiently
+        red_mask = np.zeros(shape, dtype=np.uint8)
+        cyan_mask = np.zeros(shape, dtype=np.uint8)
+        magenta_mask = np.zeros(shape, dtype=np.uint8)
+        
+        # Draw all contours at once instead of one by one
+        cv2.drawContours(red_mask, red_contours, -1, 255, -1)
+        cv2.drawContours(cyan_mask, cyan_contours, -1, 255, -1)
+        cv2.drawContours(magenta_mask, magenta_contours, -1, 255, -1)
 
-        # Calculate intersections and differences
+        # Calculate intersections
         cyan_in_red = cv2.bitwise_and(cyan_mask, red_mask)
-        cyan_outside_red = cv2.bitwise_and(cyan_mask, cv2.bitwise_not(red_mask))
+        magenta_in_red = cv2.bitwise_and(magenta_mask, red_mask)
 
-        # Calculate areas (in pixels)
-        total_red_area = np.sum(red_mask > 0)
-        total_cyan_area = np.sum(cyan_mask > 0)
-        cyan_in_red_area = np.sum(cyan_in_red > 0)
-        cyan_outside_red_area = np.sum(cyan_outside_red > 0)
+        # Find regions using more efficient contour finding
+        cyan_in_red_contours, _ = cv2.findContours(cyan_in_red, cv2.RETR_EXTERNAL, 
+                                                cv2.CHAIN_APPROX_SIMPLE)
+        magenta_in_red_contours, _ = cv2.findContours(magenta_in_red, cv2.RETR_EXTERNAL, 
+                                                    cv2.CHAIN_APPROX_SIMPLE)
+
+        # Count regions and calculate areas
+        num_cyan_regions = len(cyan_in_red_contours)
+        num_magenta_regions = len(magenta_in_red_contours)
+        
+        # Use numpy operations for faster area calculations
+        total_red_area = np.count_nonzero(red_mask)
+        total_cyan_area = np.count_nonzero(cyan_mask)
+        total_magenta_area = np.count_nonzero(magenta_mask)
+        cyan_in_red_area = np.count_nonzero(cyan_in_red)
+        magenta_in_red_area = np.count_nonzero(magenta_in_red)
+
+        # Calculate ratios
+        region_ratio = num_magenta_regions / num_cyan_regions if num_cyan_regions > 0 else 0
+        area_ratio = magenta_in_red_area / cyan_in_red_area if cyan_in_red_area > 0 else 0
 
         return {
             'total_red': total_red_area,
             'total_cyan': total_cyan_area,
+            'total_magenta': total_magenta_area,
             'cyan_in_red': cyan_in_red_area,
-            'cyan_outside_red': cyan_outside_red_area,
+            'magenta_in_red': magenta_in_red_area,
+            'num_cyan_regions': num_cyan_regions,
+            'num_magenta_regions': num_magenta_regions,
+            'region_ratio': region_ratio,
+            'area_ratio': area_ratio,
             'cyan_in_red_percentage': (cyan_in_red_area / total_cyan_area * 100) if total_cyan_area > 0 else 0,
-            'cyan_outside_red_percentage': (cyan_outside_red_area / total_cyan_area * 100) if total_cyan_area > 0 else 0,
-            'overlap_masks': (red_mask, cyan_mask, cyan_in_red, cyan_outside_red)
+            'magenta_in_red_percentage': (magenta_in_red_area / total_magenta_area * 100) if total_magenta_area > 0 else 0,
+            'overlap_masks': (red_mask, cyan_mask, magenta_mask, cyan_in_red, magenta_in_red)
         }
 
     def create_visualization(self, image: np.ndarray, contours: List[np.ndarray], 
@@ -140,54 +165,109 @@ class MultichannelAnalyzer:
         
         return vis
 
-    def create_overlap_visualization(self, image: np.ndarray, red_mask: np.ndarray, 
-                                   cyan_mask: np.ndarray, cyan_in_red: np.ndarray, 
-                                   cyan_outside_red: np.ndarray, areas: dict) -> np.ndarray:
+    def create_overlap_visualization(self, image: np.ndarray, red_mask: np.ndarray,
+                                   cyan_mask: np.ndarray, magenta_mask: np.ndarray,
+                                   cyan_in_red: np.ndarray, magenta_in_red: np.ndarray,
+                                   areas: dict) -> np.ndarray:
         """Create visualization showing overlapping regions"""
         # Create colored visualization
         vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-        
-        # Create color overlays
+
+        # Draw regions
         vis[red_mask > 0] = [0, 0, 200]  # Red regions
-        vis[cyan_outside_red > 0] = [200, 200, 0]  # Cyan outside red
-        vis[cyan_in_red > 0] = [200, 0, 200]  # Overlap in magenta
+        vis[cyan_in_red > 0] = [200, 200, 0]  # Cyan in red
+        vis[magenta_in_red > 0] = [200, 0, 200]  # Magenta in red
 
         # Add text with measurements
-        cv2.putText(vis, f'Total Red Area: {areas["total_red"]}', (10, 30), 
+        cv2.putText(vis, f'Total Red Area: {areas["total_red"]}', (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis, f'Total Cyan Area: {areas["total_cyan"]}', (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis, f'Cyan in Red: {areas["cyan_in_red"]} ({areas["cyan_in_red_percentage"]:.1f}%)', 
+        
+        cv2.putText(vis, f'Cyan in Red: {areas["cyan_in_red"]} ({areas["cyan_in_red_percentage"]:.1f}%)',
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        cv2.putText(vis, f'Magenta in Red: {areas["magenta_in_red"]} ({areas["magenta_in_red_percentage"]:.1f}%)',
                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis, f'Cyan outside Red: {areas["cyan_outside_red"]} ({areas["cyan_outside_red_percentage"]:.1f}%)', 
+        
+        cv2.putText(vis, f'Area Ratio (M/C): {areas["area_ratio"]:.3f}',
                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+        cv2.putText(vis, f'Regions - Cyan: {areas["num_cyan_regions"]}, Magenta: {areas["num_magenta_regions"]}',
+                   (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        cv2.putText(vis, f'Region Ratio (M/C): {areas["region_ratio"]:.3f}',
+                   (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         return vis
 
-    def process_channels(self, red_img: np.ndarray, cyan_img: np.ndarray, 
+    def process_channels(self, red_img: np.ndarray, cyan_img: np.ndarray,
                         magenta_img: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Process all channels and create visualizations"""
         # Detect structures
-        red_contours = self.detect_structures(red_img, self.red_threshold, 
+        red_contours = self.detect_structures(red_img, self.red_threshold,
                                             self.red_min_area, self.red_max_area)
         cyan_contours = self.detect_structures(cyan_img, self.cyan_threshold)
         magenta_contours = self.detect_structures(magenta_img, self.magenta_threshold)
 
         # Calculate areas and create overlap visualization
-        areas = self.calculate_areas(red_contours, cyan_contours, red_img.shape)
-        red_mask, cyan_mask, cyan_in_red, cyan_outside_red = areas['overlap_masks']
-        overlap_vis = self.create_overlap_visualization(red_img, red_mask, cyan_mask, 
-                                                      cyan_in_red, cyan_outside_red, areas)
+        areas = self.calculate_areas(red_contours, cyan_contours, magenta_contours, red_img.shape)
+        red_mask, cyan_mask, magenta_mask, cyan_in_red, magenta_in_red = areas['overlap_masks']
+        
+        overlap_vis = self.create_overlap_visualization(
+            red_img, red_mask, cyan_mask, magenta_mask,
+            cyan_in_red, magenta_in_red, areas
+        )
 
         # Create standard visualizations
         red_vis = self.create_visualization(red_img, red_contours, 'Red', self.red_threshold)
         cyan_vis = self.create_visualization(cyan_img, cyan_contours, 'Cyan', self.cyan_threshold)
         magenta_vis = self.create_visualization(magenta_img, magenta_contours, 'Magenta', self.magenta_threshold)
 
+        # Print detailed measurements
+        print("\nArea Measurements:")
+        print(f"Cyan areas in red: {areas['num_cyan_regions']} regions, {areas['cyan_in_red']} pixels")
+        print(f"Magenta areas in red: {areas['num_magenta_regions']} regions, {areas['magenta_in_red']} pixels")
+        print(f"Region ratio (M/C): {areas['region_ratio']:.3f}")
+        print(f"Area ratio (M/C): {areas['area_ratio']:.3f}")
+
         return red_vis, cyan_vis, magenta_vis, overlap_vis
 
+    def find_optimal_threshold(self, channel: np.ndarray) -> int:
+        """Find optimal threshold using Otsu's method with higher selectivity"""
+        # Get Otsu's threshold as base
+        otsu_thresh, _ = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Make it much more selective
+        adjustment_factor = 1.5  # 50% higher than Otsu
+        base_minimum = 0      # Don't go below this threshold
+        
+        # Take the maximum of:
+        # 1. Adjusted Otsu threshold
+        # 2. Base minimum threshold
+        # 3. 90th percentile of image intensity
+        adjusted_thresh = max(
+            int(otsu_thresh * adjustment_factor),
+            base_minimum,
+            int(np.percentile(channel, 90))
+        )
+        
+        # Ensure we don't exceed 255
+        return min(adjusted_thresh, 255)
+
+    def auto_adjust_thresholds(self, red_img: np.ndarray, cyan_img: np.ndarray, 
+                            magenta_img: np.ndarray) -> None:
+        """Automatically adjust thresholds for all channels"""
+        # Find optimal thresholds
+        self.red_threshold = self.find_optimal_threshold(red_img)
+        self.cyan_threshold = self.find_optimal_threshold(cyan_img)
+        self.magenta_threshold = self.find_optimal_threshold(magenta_img)
+        
+        print(f"Auto-detected thresholds:")
+        print(f"Red: {self.red_threshold}")
+        print(f"Cyan: {self.cyan_threshold}")
+        print(f"Magenta: {self.magenta_threshold}")
+
 def main():
-    """Interactive threshold adjustment"""
+    """Interactive threshold adjustment with auto-detection"""
     analyzer = MultichannelAnalyzer()
     
     # Load channel images
@@ -197,6 +277,10 @@ def main():
     
     try:
         red_img, cyan_img, magenta_img = analyzer.load_images(red_path, cyan_path, magenta_path)
+        
+        # Auto-detect thresholds
+        analyzer.auto_adjust_thresholds(red_img, cyan_img, magenta_img)
+        
     except ValueError as e:
         print(f"Error loading images: {e}")
         return
@@ -232,28 +316,44 @@ def main():
         update_display()
 
     # Create windows with trackbars
-    cv2.namedWindow('Red Channel')
-    cv2.namedWindow('Cyan Channel')
-    cv2.namedWindow('Magenta Channel')
-    cv2.namedWindow('Overlap Analysis')
+    cv2.namedWindow('Red Channel', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Cyan Channel', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Magenta Channel', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Overlap Analysis', cv2.WINDOW_NORMAL)
     
-    cv2.createTrackbar('Brightness', 'Red Channel', 0, 255, on_red_threshold)
-    cv2.createTrackbar('Min Area', 'Red Channel', analyzer.red_min_area, 500, on_min_area)
-    cv2.createTrackbar('Max Area', 'Red Channel', analyzer.red_max_area // 1000, 100, on_max_area)
-    cv2.createTrackbar('Brightness', 'Cyan Channel', 0, 255, on_cyan_threshold)
-    cv2.createTrackbar('Brightness', 'Magenta Channel', 0, 255, on_magenta_threshold)
+    # Resize windows to make sure trackbars are visible
+    cv2.resizeWindow('Red Channel', 800, 600)
+    cv2.resizeWindow('Cyan Channel', 800, 600)
+    cv2.resizeWindow('Magenta Channel', 800, 600)
+    cv2.resizeWindow('Overlap Analysis', 800, 600)
+    
+    # Create trackbars with initial positions matching auto-detected thresholds
+    initial_red_pos = 255 - analyzer.red_threshold
+    initial_cyan_pos = 255 - analyzer.cyan_threshold
+    initial_magenta_pos = 255 - analyzer.magenta_threshold
+    
+    # Create trackbars
+    cv2.createTrackbar('Red Brightness', 'Red Channel', initial_red_pos, 255, on_red_threshold)
+    cv2.createTrackbar('Red Min Area', 'Red Channel', analyzer.red_min_area, 500, on_min_area)
+    cv2.createTrackbar('Red Max Area', 'Red Channel', analyzer.red_max_area // 1000, 100, on_max_area)
+    cv2.createTrackbar('Cyan Brightness', 'Cyan Channel', initial_cyan_pos, 255, on_cyan_threshold)
+    cv2.createTrackbar('Magenta Brightness', 'Magenta Channel', initial_magenta_pos, 255, on_magenta_threshold)
 
     # Initial processing
     update_display()
 
     print("\nControls:")
-    print("Adjust the sliders to change detection parameters.")
-    print("Move Brightness sliders right for brighter structures.")
+    print(f"Initial brightness positions:")
+    print(f"Red: {initial_red_pos}")
+    print(f"Cyan: {initial_cyan_pos}")
+    print(f"Magenta: {initial_magenta_pos}")
+    print("\nAdjust the sliders to fine-tune detection parameters")
+    print("Move Brightness sliders right for brighter structures")
     print("The Overlap Analysis window shows:")
     print("  - Red: Red channel regions")
-    print("  - Cyan: Cyan regions outside red")
-    print("  - Magenta: Cyan regions inside red")
-    print("Press 'q' or 'ESC' to quit.")
+    print("  - Cyan: Cyan in red regions")
+    print("  - Magenta: Magenta in red regions")
+    print("Press 'q' or 'ESC' to quit")
     
     # Main loop
     while True:
