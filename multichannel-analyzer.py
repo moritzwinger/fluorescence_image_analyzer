@@ -124,8 +124,8 @@ class MultichannelAnalyzer:
         magenta_in_red_area = np.count_nonzero(magenta_in_red)
 
         # Calculate ratios
-        region_ratio = num_magenta_regions / num_cyan_regions if num_cyan_regions > 0 else 0
-        area_ratio = magenta_in_red_area / cyan_in_red_area if cyan_in_red_area > 0 else 0
+        region_ratio = num_cyan_regions / num_magenta_regions if num_magenta_regions > 0 else 0
+        area_ratio = cyan_in_red_area / magenta_in_red_area if magenta_in_red_area > 0 else 0
 
         return {
             'total_red': total_red_area,
@@ -188,13 +188,13 @@ class MultichannelAnalyzer:
         cv2.putText(vis, f'Magenta in Red: {areas["magenta_in_red"]} ({areas["magenta_in_red_percentage"]:.1f}%)',
                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        cv2.putText(vis, f'Area Ratio (M/C): {areas["area_ratio"]:.3f}',
+        cv2.putText(vis, f'Area Ratio (C/M): {areas["area_ratio"]:.3f}',
                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         cv2.putText(vis, f'Regions - Cyan: {areas["num_cyan_regions"]}, Magenta: {areas["num_magenta_regions"]}',
                    (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        cv2.putText(vis, f'Region Ratio (M/C): {areas["region_ratio"]:.3f}',
+        cv2.putText(vis, f'Region Ratio (C/M): {areas["region_ratio"]:.3f}',
                    (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         return vis
@@ -237,8 +237,8 @@ class MultichannelAnalyzer:
         otsu_thresh, _ = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         # Make it much more selective
-        adjustment_factor = 1.5  # 50% higher than Otsu
-        base_minimum = 0      # Don't go below this threshold
+        adjustment_factor = 0.2  # adust me
+        base_minimum = 0         # Don't go below this threshold
         
         # Take the maximum of:
         # 1. Adjusted Otsu threshold
