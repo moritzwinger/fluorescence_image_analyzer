@@ -237,7 +237,7 @@ class MultichannelAnalyzer:
         otsu_thresh, _ = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         # Make it much more selective
-        adjustment_factor = 0.2  # 50% higher than Otsu
+        adjustment_factor = 0.2  # adust me
         base_minimum = 0      # Don't go below this threshold
         
         # Take the maximum of:
