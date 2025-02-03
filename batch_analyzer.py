@@ -1,3 +1,5 @@
+# batch_analyzer.py
+
 from multichannel_analyzer import MultichannelAnalyzer
 import cv2
 import numpy as np
@@ -10,40 +12,66 @@ class BatchAnalyzer(MultichannelAnalyzer):
     def __init__(self):
         super().__init__()
         self.results = []
+        self.folder_path = None
 
-    def process_folder(self, folder_path: str, red_suffix: str = "_red.tif", 
-                      cyan_suffix: str = "_cyan.tif", magenta_suffix: str = "_magenta.tif"):
+    def process_folder(self, folder_path: str):
         """Process all image sets in a folder"""
-        # Get all unique base filenames (without suffixes)
+        self.folder_path = folder_path
         files = os.listdir(folder_path)
-        base_names = set()
-        for file in files:
-            if file.endswith(red_suffix):
-                base_name = file.replace(red_suffix, "")
-                base_names.add(base_name)
-
-        # Process each set of images
-        for base_name in base_names:
-            red_path = os.path.join(folder_path, base_name + red_suffix)
-            cyan_path = os.path.join(folder_path, base_name + cyan_suffix)
-            magenta_path = os.path.join(folder_path, base_name + magenta_suffix)
-
-            # Skip if any file is missing
-            if not all(os.path.exists(p) for p in [red_path, cyan_path, magenta_path]):
-                print(f"Skipping {base_name} - missing one or more files")
+        
+        # Define treatments
+        treatments = [
+            'Antimycin_3',
+            'Antimycin_7',
+            'UT_3',
+            'UT_7'
+        ]
+        
+        # Process each treatment
+        for treatment in treatments:
+            # Construct exact filenames using f-strings
+            base_pattern = f"MAX_WT_mDA_{treatment}"
+            cyan_file = f"{base_pattern}_Cyan.tif"
+            magenta_file = f"{base_pattern}_Magenta.tif"
+            red_file = f"{base_pattern}_Red.tif"
+            
+            # Check if files exist
+            if not all(f in files for f in [cyan_file, magenta_file, red_file]):
+                print(f"\nSkipping {treatment} - missing files:")
+                if cyan_file not in files:
+                    print(f"  Missing {cyan_file}")
+                if magenta_file not in files:
+                    print(f"  Missing {magenta_file}")
+                if red_file not in files:
+                    print(f"  Missing {red_file}")
                 continue
-
+            
             try:
-                result = self.process_image_set(base_name, red_path, cyan_path, magenta_path)
+                # Create full paths
+                cyan_path = os.path.join(folder_path, cyan_file)
+                magenta_path = os.path.join(folder_path, magenta_file)
+                red_path = os.path.join(folder_path, red_file)
+                
+                print(f"\nProcessing {treatment}:")
+                print(f"Files:")
+                print(f"  Cyan: {cyan_file}")
+                print(f"  Magenta: {magenta_file}")
+                print(f"  Red: {red_file}")
+                
+                result = self.process_image_set(treatment, red_path, cyan_path, magenta_path)
                 self.results.append(result)
-                print(f"Processed {base_name}")
+                print(f"Successfully processed {treatment}")
+                
             except Exception as e:
-                print(f"Error processing {base_name}: {e}")
+                print(f"Error processing {treatment}: {str(e)}")
 
-        # Save results
-        self.save_results()
+        # Save results if any sets were processed
+        if self.results:
+            self.save_results()
+        else:
+            print("No results to save - no image sets were successfully processed")
 
-    def process_image_set(self, base_name: str, red_path: str, cyan_path: str, magenta_path: str) -> dict:
+    def process_image_set(self, treatment: str, red_path: str, cyan_path: str, magenta_path: str) -> dict:
         """Process a single set of images"""
         # Load images
         red_img, cyan_img, magenta_img = self.load_images(red_path, cyan_path, magenta_path)
@@ -66,10 +94,21 @@ class BatchAnalyzer(MultichannelAnalyzer):
 
         # Calculate areas
         areas = self.calculate_areas(red_contours, cyan_contours, magenta_contours, red_img.shape)
+        
+        # Save validation images in the input folder
+        output_dir = os.path.join(self.folder_path, "validation_images")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Use f-string for output filenames
+        red_vis, cyan_vis, magenta_vis, overlap_vis = self.process_channels(red_img, cyan_img, magenta_img)
+        cv2.imwrite(os.path.join(output_dir, f"MAX_WT_mDA_{treatment}_red_check.png"), red_vis)
+        cv2.imwrite(os.path.join(output_dir, f"MAX_WT_mDA_{treatment}_cyan_check.png"), cyan_vis)
+        cv2.imwrite(os.path.join(output_dir, f"MAX_WT_mDA_{treatment}_magenta_check.png"), magenta_vis)
+        cv2.imwrite(os.path.join(output_dir, f"MAX_WT_mDA_{treatment}_overlap_check.png"), overlap_vis)
 
         # Compile results
         result = {
-            'filename': base_name,
+            'treatment': treatment,
             'red_threshold': red_thresh,
             'cyan_threshold': cyan_thresh,
             'magenta_threshold': magenta_thresh,
@@ -86,14 +125,10 @@ class BatchAnalyzer(MultichannelAnalyzer):
         return result
 
     def save_results(self):
-        """Save results to CSV file"""
-        if not self.results:
-            print("No results to save")
-            return
-
+        """Save results to CSV file in the input folder"""
         # Create filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"analysis_results_{timestamp}.csv"
+        filename = os.path.join(self.folder_path, f"analysis_results_{timestamp}.csv")
 
         # Write results
         with open(filename, 'w', newline='') as f:
@@ -101,7 +136,7 @@ class BatchAnalyzer(MultichannelAnalyzer):
             writer.writeheader()
             writer.writerows(self.results)
 
-        print(f"Results saved to {filename}")
+        print(f"\nResults saved to: {filename}")
 
 def batch_process(folder_path: str):
     """Process all images in a folder"""
@@ -109,6 +144,6 @@ def batch_process(folder_path: str):
     analyzer.process_folder(folder_path)
 
 if __name__ == "__main__":
-    # Example usage
     folder_path = input("Enter the path to your images folder: ")
     batch_process(folder_path)
+
