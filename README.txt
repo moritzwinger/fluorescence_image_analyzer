@@ -78,3 +78,14 @@ The tool provides:
    - Make sure your files are single-channel TIFF images
    - The script will automatically convert color TIFFs to grayscale
    - High bit-depth images (12-bit, 16-bit) are automatically normalized to 8-bit
+
+## Batch processing:
+
+```
+python3 batch_analyzer.py
+```
+
+When prompted, enter path to image folder. Filenames are of the format MAX_WT_mDA_{treatment}_{channel}.tif. Make sure to add treatments into treatments lists (hardcoded for now). Channels are "cyan", "red" and "magenta".
+
+The batch analyzer will create a csv with results and a folder called validation_images to validate parameters for Otsu's method for threshold selection.
+
