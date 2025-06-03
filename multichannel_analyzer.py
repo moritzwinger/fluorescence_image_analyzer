@@ -271,9 +271,9 @@ def main():
     analyzer = MultichannelAnalyzer()
     
     # Load channel images
-    red_path = "red_channel.tif"
-    cyan_path = "cyan_channel.tif"
-    magenta_path = "magenta_channel.tif"
+    red_path = "C3.tif"
+    cyan_path = "C2.tif"
+    magenta_path = "C1.tif"
     
     try:
         red_img, cyan_img, magenta_img = analyzer.load_images(red_path, cyan_path, magenta_path)
