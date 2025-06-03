@@ -31,9 +31,9 @@ class BatchAnalyzer(MultichannelAnalyzer):
         for treatment in treatments:
             # Construct exact filenames using f-strings
             base_pattern = f"MAX_WT_mDA_{treatment}"
-            cyan_file = f"{base_pattern}_Cyan.tif"
-            magenta_file = f"{base_pattern}_Magenta.tif"
-            red_file = f"{base_pattern}_Red.tif"
+            cyan_file = f"{base_pattern}_C2.tif"
+            magenta_file = f"{base_pattern}_C1.tif"
+            red_file = f"{base_pattern}_C3.tif"
             
             # Check if files exist
             if not all(f in files for f in [cyan_file, magenta_file, red_file]):
